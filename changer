@@ -1,0 +1,102 @@
+#define EMPTYHAND_SEQUENCE_COUNT	35
+#define WEAPON_INDEX_HANDS			17
+ 
+static int get_sequence_count( sdk::model_t model )
+{
+	if ( !model )
+		return 0;
+ 
+	//
+	// Just a paste from ida, too lazy to reverse that shit
+	// You can find this in GetSequenceActivityName
+	//
+	auto v6 = *(uint64_t*)( model + 16 );
+ 
+	int numseq = v6 ? *(uint32_t*)( v6 + 32 ) : *(uint32_t*)( *(uint64_t*)( model + 8 ) + 192i64 );
+ 
+	return numseq;
+}
+ 
+static uint32_t get_sequence_activity( sdk::C_BaseEntity* entity, int sequence )
+{
+	auto model = sdk::get_model( entity );
+	if ( model )
+	{
+		auto desc = sdk::pSeqdesc( model, sequence );
+		if ( desc )
+		{
+			auto name = desc->pszActivityName();
+			if ( name && *name )
+			{
+				return jm::hash( name );
+			}
+		}
+	}
+	return UINT32_MAX;
+}
+ 
+static uint32_t get_activity_sequence( sdk::C_BaseEntity* entity, uint32_t activity )
+{
+	if ( activity != UINT32_MAX )
+	{
+		auto model = sdk::get_model( entity );
+		if ( model )
+		{
+			auto seqcount = get_sequence_count( model );
+			for ( int sequence = 0; sequence < seqcount; sequence++ )
+			{
+				auto desc = sdk::pSeqdesc( model, sequence );
+				if ( desc )
+				{
+					auto name = desc->pszActivityName();
+ 
+					if ( name && *name && jm::hash( name ) == activity )
+						return sequence;
+				}
+			}
+		}
+	}
+	return UINT32_MAX;
+}
+ 
+static bool is_current_weapon_hands( sdk::C_BaseEntity* entity )
+{
+	auto weapon = entity->m_latestPrimaryWeapons.is_valid() ?
+		sdk::client_entity_list->GetClientEntity( entity->m_latestPrimaryWeapons.index() )
+		: nullptr;
+ 
+	if ( !weapon )
+		return false;
+ 
+	return weapon->m_weaponNameIndex == WEAPON_INDEX_HANDS;
+}
+ 
+void features::skinchanger::createmove()
+{
+	auto local_entity = sdk::get_local();
+ 
+	if ( !local_entity )
+		return;
+ 
+	auto viewmodel_entity = sdk::get_viewmodel_entity( local_entity );
+	if ( !viewmodel_entity )
+		return;
+ 
+	if ( is_current_weapon_hands( local_entity ) )
+	{
+		const auto cur_sequence = viewmodel_entity->m_currentFrameBaseAnimating_animSequence;
+ 
+		uint32_t cur_activity = get_sequence_activity( viewmodel_entity, cur_sequence );
+ 
+		//
+		// Change model to heirloom right here
+		//
+ 
+		auto new_sequence = get_activity_sequence( viewmodel_entity, cur_activity );
+ 
+		if ( new_sequence != UINT32_MAX )
+		{
+			viewmodel_entity->m_currentFrameBaseAnimating_animSequence = new_sequence;
+		}
+	}
+}
